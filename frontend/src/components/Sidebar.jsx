@@ -92,7 +92,9 @@ export default function Sidebar({
                 >
                   <MessageCircle className="w-5 h-5 text-white" />
                 </div>
-                <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white animate-pulse"></div>
+                <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${
+                  peer.online ? "bg-green-500 animate-pulse" : "bg-gray-500"
+                }`}></div>
               </div>
               <div className="flex-1 text-left">
                 <p className={`font-semibold text-sm ${darkMode && activeChat?.id !== peer.id ? "text-white" : ""}`}>
@@ -103,7 +105,7 @@ export default function Sidebar({
                     activeChat?.id === peer.id ? "text-white/70" : darkMode ? "text-gray-400" : ""
                   }`}
                 >
-                  {"Available"}
+                  {peer.online ? "Online" : "Offline"}
                 </p>
               </div>
             </button>

@@ -84,6 +84,7 @@ async function createNode(name, wss, deviceId) {
   function handleIncomingMessage(peerId, message) {
     try {
       if (message.type === 'intro') {
+        console.log(`Received intro from ${message.name} (${message.deviceId}) -> ${peerId}`);
         const peer = connectedPeers.get(peerId);
         if (peer) {
           peer.name = message.name;
@@ -97,6 +98,20 @@ async function createNode(name, wss, deviceId) {
         if (message.deviceId) {
           deviceToPeerMap.set(message.deviceId, peerId);
           peerToDeviceMap.set(peerId, message.deviceId);
+          console.log(`Updated device mapping: ${message.deviceId} -> ${peerId}`);
+          
+          // Notify clients about peer coming online
+          wss.clients.forEach(client => {
+            if (client.readyState === 1) {
+              client.send(JSON.stringify({
+                type: 'peerStatusChange',
+                deviceId: message.deviceId,
+                name: message.name,
+                status: 'online',
+                timestamp: new Date().toISOString()
+              }));
+            }
+          });
         }
         
         addLog(`${message.name} connected`);
@@ -106,16 +121,18 @@ async function createNode(name, wss, deviceId) {
       } else if (message.type === 'chat') {
         const peer = connectedPeers.get(peerId);
         const senderName = peer ? peer.name : 'Unknown';
+        const senderDeviceId = peer ? peer.deviceId : peerId;
 
         wss.clients.forEach(client => {
           if (client.readyState === 1) {
             client.send(JSON.stringify({
               type: 'message',
               from: senderName,
-              fromId: peerId,
+              fromId: senderDeviceId,
               content: message.content,
               id: message.id,
-              timestamp: new Date().toISOString()
+              timestamp: new Date().toISOString(),
+              toId: myDeviceId
             }));
           }
         });
@@ -286,8 +303,8 @@ async function createNode(name, wss, deviceId) {
       const outgoingStream = pushable();
       outgoingStreams.set(peerId, outgoingStream);
 
-      const introMessage = JSON.stringify({ type: 'intro', name, peerId: myPeerId, deviceId: myDeviceId });
-      outgoingStream.push(fromString(introMessage));
+      // Don't send intro message here - it will be sent when the stream is established
+      // in the libp2p.handle function
 
       pipe(outgoingStream, stream.sink).catch(err => {
         addLog(`Outgoing stream error for ${peerId}: ${err.message}`);
@@ -320,10 +337,33 @@ async function createNode(name, wss, deviceId) {
     const peer = connectedPeers.get(peerId);
     if (peer) {
       addLog(`${peer.name} disconnected`);
+      
+      // Notify clients about peer going offline
+      const deviceId = peerToDeviceMap.get(peerId);
+      if (deviceId) {
+        wss.clients.forEach(client => {
+          if (client.readyState === 1) {
+            client.send(JSON.stringify({
+              type: 'peerStatusChange',
+              deviceId: deviceId,
+              name: peer.name,
+              status: 'offline',
+              timestamp: new Date().toISOString()
+            }));
+          }
+        });
+      }
     }
 
     connectedPeers.delete(peerId);
     pendingConnections.delete(peerId);
+
+    // Clean up device ID mappings
+    const deviceId = peerToDeviceMap.get(peerId);
+    if (deviceId) {
+      deviceToPeerMap.delete(deviceId);
+      peerToDeviceMap.delete(peerId);
+    }
 
     const stream = outgoingStreams.get(peerId);
     if (stream) {
@@ -352,7 +392,15 @@ async function createNode(name, wss, deviceId) {
     cleanupPeer(peerId);
   });
 
-  async function sendMessage(message, targetPeerId) {
+  async function sendMessage(message, targetDeviceId) {
+    
+    // Convert device ID to peer ID
+    const targetPeerId = deviceToPeerMap.get(targetDeviceId);
+    if (!targetPeerId) {
+      addLog(`No peer found for device ID ${targetDeviceId}`);
+      return false;
+    }
+
     const stream = outgoingStreams.get(targetPeerId);
     if (!stream) {
       addLog(`No stream found for peer ${targetPeerId}`);
@@ -407,7 +455,14 @@ async function createNode(name, wss, deviceId) {
     return true; // Return true even if sent to 0 peers (for local display)
   }
 
-  async function sendFile(file, targetPeerId) {
+  async function sendFile(file, targetDeviceId) {
+    // Convert device ID to peer ID
+    const targetPeerId = deviceToPeerMap.get(targetDeviceId);
+    if (!targetPeerId) {
+      addLog(`No peer found for device ID ${targetDeviceId}`);
+      return false;
+    }
+
     const stream = outgoingStreams.get(targetPeerId);
     if (!stream) {
       addLog(`No stream found for peer ${targetPeerId}`);
@@ -470,7 +525,14 @@ async function createNode(name, wss, deviceId) {
     return true;
   }
 
-  async function editMessage(messageId, newContent, targetPeerId) {
+  async function editMessage(messageId, newContent, targetDeviceId) {
+    // Convert device ID to peer ID
+    const targetPeerId = deviceToPeerMap.get(targetDeviceId);
+    if (!targetPeerId) {
+      addLog(`No peer found for device ID ${targetDeviceId}`);
+      return false;
+    }
+
     const stream = outgoingStreams.get(targetPeerId);
     if (!stream) {
       addLog(`No stream found for peer ${targetPeerId}`);
@@ -489,7 +551,14 @@ async function createNode(name, wss, deviceId) {
     }
   }
 
-  async function deleteMessage(messageId, targetPeerId) {
+  async function deleteMessage(messageId, targetDeviceId) {
+    // Convert device ID to peer ID
+    const targetPeerId = deviceToPeerMap.get(targetDeviceId);
+    if (!targetPeerId) {
+      addLog(`No peer found for device ID ${targetDeviceId}`);
+      return false;
+    }
+
     const stream = outgoingStreams.get(targetPeerId);
     if (!stream) {
       addLog(`No stream found for peer ${targetPeerId}`);
@@ -612,7 +681,9 @@ wss.on('connection', (ws) => {
         }));
 
       } else if (data.type === 'sendMessage' && node) {
+        console.log('Received sendMessage request:', data);
         const success = await node.sendMessage(data.message, data.targetPeerId);
+        console.log('Message send result:', success);
 
         if (success) {
           ws.send(JSON.stringify({

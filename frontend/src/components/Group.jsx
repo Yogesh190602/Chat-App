@@ -63,7 +63,7 @@ export function GroupChatWindow({
               {!message.isOwnMessage && (
                 <p className={`text-xs font-semibold mb-1 ${darkMode ? "text-gray-300" : ""}`}>{message.from}</p>
               )}
-              {message.isFile ? <FileMessage message={message} /> : <p className="text-sm">{message.content}</p>}
+              {message.isFile ? <FileMessage message={message} /> : <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>}
               <p className={`text-xs mt-1 ${message.isOwnMessage ? "text-white/70" : darkMode ? "text-gray-400" : ""}`}>
                 {new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
               </p>
@@ -100,7 +100,7 @@ export function GroupChatWindow({
           </button>
           <div className="flex-1 relative">
             <textarea
-              value={input}utilities
+              value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder="Type your message..."

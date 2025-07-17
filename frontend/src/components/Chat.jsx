@@ -43,11 +43,15 @@ export function ChatWindow({
               <div className="w-10 h-10 bg-gradient-to-r from-violet-500 to-purple-500 rounded-xl flex items-center justify-center shadow-md">
                 <MessageCircle className="w-5 h-5 text-white" />
               </div>
-              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white animate-pulse"></div>
+              <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${
+                activeChat.online ? "bg-green-500 animate-pulse" : "bg-gray-500"
+              }`}></div>
             </div>
             <div>
               <h2 className={`text-lg font-semibold ${darkMode ? "text-white" : ""}`}>{activeChat.name}</h2>
-              <p className={`text-sm ${darkMode ? "text-gray-400" : ""}`}>{"Online"}</p>
+              <p className={`text-sm ${darkMode ? "text-gray-400" : ""}`}>
+                {activeChat.online ? "Online" : "Offline"}
+              </p>
             </div>
           </div>
           <div className="flex items-center space-x-2">
@@ -86,7 +90,7 @@ export function ChatWindow({
               {message.isFile ? (
                 <FileMessage message={message} />
               ) : (
-                <p className="text-sm message-content">{message.content}</p>
+                <p className="text-sm message-content whitespace-pre-wrap break-words">{message.content}</p>
               )}
               <p className={`text-xs mt-1 ${message.isOwnMessage ? "text-white/70" : darkMode ? "text-gray-400" : ""}`}>
                 {new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
@@ -199,6 +203,7 @@ export function MessageOptions({ message, onEdit, onDelete, onCopy }) {
     </div>
   )
 }
+
 
 export function FileMessage({ message }) {
   const downloadFile = () => {

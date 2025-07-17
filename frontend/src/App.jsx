@@ -307,6 +307,27 @@ export default function App() {
               [chatKey]: updated,
             };
           })
+        } else if (data.type === "peerStatusChange") {
+          // Handle peer status change (online/offline)
+          console.log(`Peer ${data.name} (${data.deviceId}) is now ${data.status}`);
+          
+          // Update the peer's status in localStorage
+          let peersMap = JSON.parse(localStorage.getItem('peersMap') || '{}');
+          if (data.deviceId && data.name) {
+            peersMap[data.deviceId] = data.name;
+          }
+          localStorage.setItem('peersMap', JSON.stringify(peersMap));
+          
+          // Trigger a re-render by updating allPeers
+          setAllPeers(prev => ({ ...prev, [data.deviceId]: data.name }));
+          
+          // You can also show a notification to the user
+          if (data.status === 'offline') {
+            // Optional: show a toast notification or similar
+            console.log(`📴 ${data.name} went offline`);
+          } else if (data.status === 'online') {
+            console.log(`✅ ${data.name} came online`);
+          }
         }
       } catch (err) {
         console.error("Error handling WebSocket message:", err)
@@ -317,6 +338,17 @@ export default function App() {
 
   const initializeConnection = useCallback(() => {
     try {
+      // Ensure deviceId is available before connecting
+      let currentDeviceId = deviceId;
+      if (!currentDeviceId) {
+        currentDeviceId = localStorage.getItem("deviceId");
+        if (!currentDeviceId) {
+          currentDeviceId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+          localStorage.setItem("deviceId", currentDeviceId);
+        }
+        setDeviceId(currentDeviceId);
+      }
+
       const socket = new WebSocket("ws://localhost:5000")
       setWs(socket)
       setIsReconnecting(false)
@@ -324,7 +356,7 @@ export default function App() {
       socket.onopen = () => {
         setConnected(true)
         setConnectionError("")
-        socket.send(JSON.stringify({ type: "start", name: name.trim(), deviceId }))
+        socket.send(JSON.stringify({ type: "start", name: name.trim(), deviceId: currentDeviceId }))
       }
 
       socket.onmessage = (event) => {
