@@ -4,13 +4,13 @@ import { openDB } from 'idb';
 
 // Use a single object store for all messages, indexed by deviceId
 export async function getDB() {
-  return openDB('chatlan-messages', 2, {
-    upgrade(db) {
+  return openDB('chatlan-messages', 4, {
+    upgrade(db, oldVersion) {
       if (!db.objectStoreNames.contains('messages')) {
         const store = db.createObjectStore('messages', { keyPath: 'id' });
         store.createIndex('deviceId', 'deviceId', { unique: false });
       } else {
-        // If upgrading from v1, add index if missing
+        // If upgrading from previous versions, add index if missing
         const store = db.transaction.objectStore('messages');
         if (!store.indexNames.contains('deviceId')) {
           store.createIndex('deviceId', 'deviceId', { unique: false });

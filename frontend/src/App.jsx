@@ -188,13 +188,13 @@ export default function App() {
               [chatKey]: updated,
             };
           })
-          // Save to IndexedDB: always use the deviceId of the peer you are chatting with
-          // Only store if the peer is not myself (never store under my own deviceId)
-          if (data.fromId === deviceId && data.toId && data.toId !== deviceId) {
-            // Sent by me: store under toId (the peer's deviceId)
+          // Save to IndexedDB: always store under toId (recipient's deviceId)
+          // This ensures both sent and received messages are stored under the recipient's deviceId
+          if (data.toId && data.toId !== deviceId) {
+            // Store under toId (recipient's deviceId) - for both sent and received messages
             saveMessage(data.toId, msgObj);
-          } else if (data.toId === deviceId && data.fromId && data.fromId !== deviceId) {
-            // Received by me: store under fromId (the peer's deviceId)
+          } else if (data.fromId && data.fromId !== deviceId) {
+            // If toId is not available or is myself, store under fromId (sender's deviceId)
             saveMessage(data.fromId, msgObj);
           }
         } else if (data.type === "fileShare") {
@@ -221,12 +221,13 @@ export default function App() {
               [chatKey]: updated,
             };
           })
-          // Save to IndexedDB: always use the deviceId of the peer you are chatting with
-          if (data.fromId === deviceId || data.fromId === "self") {
-            // Sent by me: store under toId (the peer's deviceId)
+          // Save to IndexedDB: always store under toId (recipient's deviceId)
+          // This ensures both sent and received files are stored under the recipient's deviceId
+          if (data.toId && data.toId !== deviceId) {
+            // Store under toId (recipient's deviceId) - for both sent and received files
             saveMessage(data.toId, msgObj);
-          } else {
-            // Received from peer: store under fromId (the peer's deviceId)
+          } else if (data.fromId && data.fromId !== deviceId && data.fromId !== "self") {
+            // If toId is not available or is myself, store under fromId (sender's deviceId)
             saveMessage(data.fromId, msgObj);
           }
         } else if (data.type === "groupFileShare") {

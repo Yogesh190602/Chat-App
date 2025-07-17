@@ -12,7 +12,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 const protocol = '/p2pchat/1.0.0';
 
-async function createNode(name, wss) {
+async function createNode(name, wss, deviceId) {
   const libp2p = await createLibp2p({
     addresses: {
       listen: [`/ip4/0.0.0.0/tcp/0`]
@@ -29,6 +29,11 @@ async function createNode(name, wss) {
   const logs = [];
   const groups = new Map();
   const myPeerId = libp2p.peerId.toString();
+  const myDeviceId = deviceId; // Store the deviceId from frontend
+  
+  // Map to store deviceId -> peerId mappings
+  const deviceToPeerMap = new Map();
+  const peerToDeviceMap = new Map();
 
   function addLog(message) {
     logs.push({ timestamp: new Date().toISOString(), message });
@@ -42,8 +47,9 @@ async function createNode(name, wss) {
 
   function updatePeerList() {
     const peerList = Array.from(connectedPeers.entries()).map(([peerId, peer]) => ({
-      id: peerId,
-      name: peer.name
+      id: peer.deviceId || peerId, // Use deviceId if available, fallback to peerId
+      name: peer.name,
+      peerId: peerId // Keep peerId for internal use
     }));
 
     wss.clients.forEach(client => {
@@ -81,10 +87,18 @@ async function createNode(name, wss) {
         const peer = connectedPeers.get(peerId);
         if (peer) {
           peer.name = message.name;
+          peer.deviceId = message.deviceId;
         } else {
           const outgoingStream = outgoingStreams.get(peerId);
-          connectedPeers.set(peerId, { name: message.name, stream: outgoingStream });
+          connectedPeers.set(peerId, { name: message.name, deviceId: message.deviceId, stream: outgoingStream });
         }
+        
+        // Update deviceId mappings
+        if (message.deviceId) {
+          deviceToPeerMap.set(message.deviceId, peerId);
+          peerToDeviceMap.set(peerId, message.deviceId);
+        }
+        
         addLog(`${message.name} connected`);
         updatePeerList();
         updateGroupList();
@@ -236,7 +250,7 @@ async function createNode(name, wss) {
     const outgoingStream = pushable();
     outgoingStreams.set(peerId, outgoingStream);
 
-    const introMessage = JSON.stringify({ type: 'intro', name, peerId: myPeerId });
+    const introMessage = JSON.stringify({ type: 'intro', name, peerId: myPeerId, deviceId: myDeviceId });
     outgoingStream.push(fromString(introMessage));
 
     pipe(outgoingStream, stream.sink).catch(err => {
@@ -272,7 +286,7 @@ async function createNode(name, wss) {
       const outgoingStream = pushable();
       outgoingStreams.set(peerId, outgoingStream);
 
-      const introMessage = JSON.stringify({ type: 'intro', name, peerId: myPeerId });
+      const introMessage = JSON.stringify({ type: 'intro', name, peerId: myPeerId, deviceId: myDeviceId });
       outgoingStream.push(fromString(introMessage));
 
       pipe(outgoingStream, stream.sink).catch(err => {
@@ -574,7 +588,7 @@ wss.on('connection', (ws) => {
       const data = JSON.parse(message);
 
       if (data.type === 'start' && !node) {
-        node = await createNode(data.name, wss);
+        node = await createNode(data.name, wss, data.deviceId);
 
         const peerList = Array.from(node.connectedPeers.entries()).map(([peerId, peer]) => ({
           id: peerId,
